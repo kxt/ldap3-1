@@ -26,7 +26,6 @@
 import socket
 from struct import pack
 from platform import system
-from sys import exc_info
 from time import sleep
 from random import choice
 from datetime import datetime
@@ -130,23 +129,14 @@ class BaseStrategy(object):
                         self.connection.server.current_address = candidate_address
                         self.connection.server.update_availability(candidate_address, True)
                         break
-                    except Exception:
+                    except Exception as e:
                         self.connection.server.update_availability(candidate_address, False)
-                        exc_type = exc_info()[0]
-                        exc_value = exc_info()[1]
-                        exc_type.__traceback__ = None  # remove traceback info to avoid circular reference of the frame
-                        exc_value.__traceback__ = None  # remove traceback info to avoid circular reference of the frame
-                        exception_history.append((datetime.now(), exc_type, exc_value, candidate_address[4]))
+                        exception_history.append(type(e)(str(e)))
 
                 if not self.connection.server.current_address and exception_history:
-                    if len(exception_history) == 1:  # only one exception, reraise
-                        if log_enabled(ERROR):
-                            log(ERROR, '<%s> for <%s>', exception_history[0][1](exception_history[0][2]), self.connection)
-                        raise exception_history[0][1](exception_history[0][2])
-                    else:
-                        if log_enabled(ERROR):
-                            log(ERROR, 'unable to open socket for <%s>', self.connection)
-                        raise LDAPSocketOpenError('unable to open socket', exception_history)
+                    if log_enabled(ERROR):
+                        log(ERROR, 'unable to open socket for <%s>', self.connection)
+                    raise LDAPSocketOpenError('unable to open socket', exception_history)
                 elif not self.connection.server.current_address:
                     if log_enabled(ERROR):
                         log(ERROR, 'invalid server address for <%s>', self.connection)
@@ -194,18 +184,15 @@ class BaseStrategy(object):
         Tries to open and connect a socket to a Server
         raise LDAPExceptionError if unable to open or connect socket
         """
-        exc = None
         try:
             self.connection.socket = socket.socket(*address[:3])
         except Exception as e:
             self.connection.last_error = 'socket creation error: ' + str(e)
-            exc = e
 
-        if exc:
             if log_enabled(ERROR):
                 log(ERROR, '<%s> for <%s>', self.connection.last_error, self.connection)
 
-            raise communication_exception_factory(LDAPSocketOpenError, exc)(self.connection.last_error)
+            raise communication_exception_factory(LDAPSocketOpenError, type(e)(str(e)))(self.connection.last_error)
 
         try:  # set socket timeout for opening connection
             if self.connection.server.connect_timeout:
@@ -213,12 +200,10 @@ class BaseStrategy(object):
             self.connection.socket.connect(address[4])
         except socket.error as e:
             self.connection.last_error = 'socket connection error while opening: ' + str(e)
-            exc = e
 
-        if exc:
             if log_enabled(ERROR):
                 log(ERROR, '<%s> for <%s>', self.connection.last_error, self.connection)
-            raise communication_exception_factory(LDAPSocketOpenError, exc)(self.connection.last_error)
+            raise communication_exception_factory(LDAPSocketOpenError, type(e)(str(e)))(self.connection.last_error)
 
         # Set connection recv timeout (must be set after connect,
         # because socket.settimeout() affects both, connect() as
@@ -234,12 +219,9 @@ class BaseStrategy(object):
                     self.connection.socket.setsockopt(socket.SOL_SOCKET, socket.SO_RCVTIMEO, pack('LL', self.connection.receive_timeout, 0))
             except socket.error as e:
                 self.connection.last_error = 'unable to set receive timeout for socket connection: ' + str(e)
-                exc = e
-
-        if exc:
-            if log_enabled(ERROR):
-                log(ERROR, '<%s> for <%s>', self.connection.last_error, self.connection)
-            raise communication_exception_factory(LDAPSocketOpenError, exc)(self.connection.last_error)
+                if log_enabled(ERROR):
+                    log(ERROR, '<%s> for <%s>', self.connection.last_error, self.connection)
+                raise communication_exception_factory(LDAPSocketOpenError, type(e)(str(e)))(self.connection.last_error)
 
         if use_ssl:
             try:
@@ -248,12 +230,10 @@ class BaseStrategy(object):
                     self.connection._usage.wrapped_sockets += 1
             except Exception as e:
                 self.connection.last_error = 'socket ssl wrapping error: ' + str(e)
-                exc = e
 
-            if exc:
                 if log_enabled(ERROR):
                     log(ERROR, '<%s> for <%s>', self.connection.last_error, self.connection)
-                raise communication_exception_factory(LDAPSocketOpenError, exc)(self.connection.last_error)
+                raise communication_exception_factory(LDAPSocketOpenError, type(e)(str(e)))(self.connection.last_error)
 
         if self.connection.usage:
             self.connection._usage.open_sockets += 1
@@ -826,7 +806,6 @@ class BaseStrategy(object):
         return response, result
 
     def sending(self, ldap_message):
-        exc = None
         if log_enabled(NETWORK):
             log(NETWORK, 'sending 1 ldap message for <%s>', self.connection)
         try:
@@ -838,13 +817,11 @@ class BaseStrategy(object):
                 log(NETWORK, 'sent %d bytes via <%s>', len(encoded_message), self.connection)
         except socket.error as e:
             self.connection.last_error = 'socket sending error' + str(e)
-            exc = e
             encoded_message = None
 
-        if exc:
             if log_enabled(ERROR):
                 log(ERROR, '<%s> for <%s>', self.connection.last_error, self.connection)
-            raise communication_exception_factory(LDAPSocketSendError, exc)(self.connection.last_error)
+            raise communication_exception_factory(LDAPSocketSendError, type(e)(str(e)))(self.connection.last_error)
 
         if self.connection.usage:
             self.connection._usage.update_transmitted_message(self.connection.request, len(encoded_message))

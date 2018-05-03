@@ -563,9 +563,9 @@ class LDAPMaximumRetriesError(LDAPExceptionError):
                     s.append('Exception history:')
                     prev_exc = ''
                     for i, exc in enumerate(self.args[1]):  # args[1] contains exception history
-                        if str(exc[1]) != prev_exc:
-                            s.append((str(i).rjust(5) + ' ' + str(exc[0]) + ': ' + str(exc[1]) + ' - ' + str(exc[2])))
-                            prev_exc = str(exc[1])
+                        if str(exc) != prev_exc:
+                            s.append((str(i).rjust(5) + ' ' + str(type(exc)) + ': ' + str(exc)))
+                            prev_exc = str(exc)
 
                 if len(self.args) > 2:
                     s.append('Maximum number of retries reached: ' + str(self.args[2]))
